@@ -1,150 +1,196 @@
-# Local File Share
+# LFS — Local File Share
 
-Chia sẻ tệp trong mạng nội bộ (LAN) hoặc qua Internet. Dùng đơn giản như `python -m http.server`, nhưng có thêm **xác thực bằng chữ ký số Ed25519** để không phải ai cũng tải được.
+Máy chủ chia sẻ tệp cho mạng nội bộ và Internet, có cấp quyền bằng chữ ký số Ed25519.
 
-- Không dùng database: tệp nằm nguyên tên gốc trong một thư mục, người dùng lưu trong 1 file text kiểu `authorized_keys`.
-- Giao diện web lấy cảm hứng từ **CTFd**, có hai ngôn ngữ **VI / EN**. Có thêm **CLI** để dùng trong script.
-- Chạy được cả trên `http://192.168.x.x` (không cần HTTPS), vì phần mật mã viết bằng JS thuần, không phụ thuộc WebCrypto.
+## Yêu cầu
+
+- Node.js 18 trở lên
+
+## Cài đặt
 
 ```bash
+git clone https://github.com/Jaycelation/LFS.git
+cd LFS
 npm install
-node server 8000 ./thu-muc-chia-se
 ```
 
-Mở `http://<ip-máy-bạn>:8000`. Người dùng đầu tiên đăng ký sẽ là **admin**.
-
----
-
-## Tính năng
-
-| # | Tính năng | Cách hoạt động |
-|---|---|---|
-| 1 | **Upload \*** | Người tải lên ký metadata của tệp (tên, kích thước, SHA-256). Server tính lại SHA-256 khi nhận và từ chối nếu không khớp. Admin tự ký là đủ; người dùng thường cần một **Khóa tải lên** do admin cấp. |
-| 2 | **Download \*** | Người tải xuống ký một yêu cầu mới (nonce + timestamp). Server trả về link dùng **1 lần, sống 60 giây**. Tải xong, CLI và web kiểm tra lại SHA-256 cùng chữ ký của người tải lên. **Xác thực khi tải là tùy chọn theo từng tệp** (xem bên dưới). |
-| 3 | **Generate Key, xác thực 1 / 2 / N chiều** | **1 chiều:** server kiểm tra chữ ký của bạn trên challenge ngẫu nhiên. **2 chiều:** bạn cũng kiểm tra chữ ký của server bằng khóa đã ghim (TOFU), chống giả mạo server. **N chiều:** một khóa cần chữ ký của M trong N người phê duyệt, cộng chữ ký của người nhận. |
-| 4 | **Cấp quyền cho hành động \*** | A tạo khóa → gửi mã `XXXX-XXXX-XXXX-XXXX` cho B → B **ký** khóa → (nếu cần, các người phê duyệt khác **đồng ký**) → B được phép tải. Khóa có giới hạn số lần dùng, thời hạn, và có thể **thu hồi**. |
-
-### Xác thực khi tải xuống là tùy chọn
-
-Mỗi tệp chọn 1 trong 2 chế độ (ô *"Yêu cầu khóa khi tải xuống"* lúc upload; chủ tệp đổi được bất cứ lúc nào):
-
-- **Công khai**: ai vào `ip:port` cũng thấy và tải được, **không cần đăng nhập**, giống `python -m http.server`. Link trực tiếp có dạng `/f/<id>/<tên-tệp>`.
-- **Cần khóa** (mặc định): áp dụng luồng ký khóa ở mục 4.
-
-Đổi giá trị mặc định bằng `DOWNLOAD_AUTH=false`.
-
-### Luồng cấp quyền tải (ví dụ 2-of-2)
-
-```
-alice upload report.pdf, chọn người phê duyệt [alice, carol], cần 2 chữ ký
-alice  ── Tạo khóa cho bob ──►  mã 8F3K-2QX9-…   (chữ ký 1/2)
-alice  ── gửi mã (chat, Zalo…) ─► bob
-bob    ── Ký nhận khóa ─────────►  chờ đồng ký
-carol  ── Đồng ký ──────────────►  2/2 ✔ → khóa ACTIVE
-bob    ── ký yêu cầu tải ───────►  link 1 lần → tải → kiểm tra SHA-256 + chữ ký alice ✔
-```
-
-Trên web, B chỉ cần mở tệp và dán mã vào ô nhập khóa (giống ô nộp flag trong CTFd). Trình duyệt tự kiểm tra chữ ký, ký nhận rồi tải về.
-
----
-
-## Dữ liệu lưu ở đâu (không có DB)
-
-```
-storage/                 tệp chia sẻ, giữ nguyên tên gốc
-storage/.lfs/<id>.json   "file chữ ký" của từng tệp: SHA-256, khóa công khai người tải lên, chữ ký, chính sách
-keys/server.key          khóa Ed25519 của server (dùng cho xác thực 2 chiều)
-keys/authorized_keys     danh sách người dùng, mỗi dòng 1 người — sửa tay được
-```
-
-**Khóa cấp quyền, phiên đăng nhập và nhật ký chỉ nằm trong RAM.** Khởi động lại server thì mọi khóa đang có tự hết hiệu lực. Người dùng và tệp vẫn được giữ.
-
-Khóa bí mật của người dùng **không bao giờ rời máy họ**: trên web được mã hóa bằng mật khẩu (PBKDF2-SHA256 + XSalsa20-Poly1305) trong `localStorage`; với CLI thì nằm trong `~/.lfs/identity.json`. Có thể xuất file danh tính từ web và dùng cho CLI (`lfs import`), hoặc ngược lại.
-
----
-
-## Chạy server
+## Khởi chạy
 
 ```bash
-npm install
-npm start                          # cổng 8080, thư mục ./storage
-node server 8000 D:\Share          # giống "python -m http.server 8000", chia sẻ D:\Share
-npm run cert                       # (tùy chọn) tạo chứng chỉ tự ký → server tự chuyển sang HTTPS
-npm test                           # 22 test end-to-end
+node server [PORT] [THƯ_MỤC]
 ```
 
-Khi khởi động, console in ra các địa chỉ LAN và **fingerprint khóa server**. Người dùng so fingerprint này ở màn hình đăng nhập để chắc chắn đang nói chuyện với đúng server.
+| Lệnh | Mô tả |
+|---|---|
+| `npm start` | Chạy ở cổng 8080, lưu tệp tại `./storage` |
+| `node server 8000 D:\Share` | Chạy ở cổng 8000, chia sẻ thư mục `D:\Share` |
+| `npm run cert` | Tạo chứng chỉ tự ký; lần khởi chạy sau máy chủ dùng HTTPS |
 
-### Cấu hình
+Khi khởi động, máy chủ in ra địa chỉ truy cập và fingerprint khóa máy chủ:
 
-Theo thứ tự ưu tiên: tham số dòng lệnh > biến môi trường > `config.json` (xem `config.example.json`).
+```
+  Local File Share  —  mode: INTERNAL
+  → http://localhost:8000
+  → http://192.168.1.10:8000
 
-| Biến môi trường | Mặc định | Ý nghĩa |
-|---|---|---|
-| `PORT` / `HOST` | `8080` / `0.0.0.0` | |
-| `NETWORK_MODE` | `internal` | `internal`: chỉ nhận IP nội bộ (10.x, 172.16-31.x, 192.168.x, 100.64/10 Tailscale, loopback), đồng thời chặn request đi qua proxy hay tunnel. `external`: nhận mọi IP. |
-| `TRUST_PROXY` | `false` | Bật khi chạy sau reverse proxy hoặc tunnel do bạn kiểm soát. |
-| `STORAGE_DIR` / `KEYS_DIR` | `storage` / `keys` | |
-| `DOWNLOAD_AUTH` | `true` | Giá trị mặc định của ô "Yêu cầu khóa khi tải xuống". |
-| `OPEN_REGISTRATION` | `true` | `false`: tài khoản mới phải được admin kích hoạt. |
-| `UPLOAD_KEY_THRESHOLD` | `1` | Số chữ ký admin cần cho một Khóa tải lên. |
-| `MAX_UPLOAD_MB` | `4096` | |
-| `MAX_GRANT_DAYS` | `30` | Thời hạn tối đa của một khóa. |
-| `SESSION_TTL_MIN` | `480` | |
+  Server key fingerprint (compare on clients for 2-way auth):
+    AB7A:45A4:DC7C:F3F6:AB56:5887:1187:7B43
+```
 
-### Dùng qua Internet (External)
+Người dùng truy cập địa chỉ trên bằng trình duyệt. Tài khoản đăng ký đầu tiên được cấp quyền quản trị.
 
-Đặt `NETWORK_MODE=external`, sau đó chọn một trong các cách:
+## Sử dụng giao diện web
 
-- **Port forwarding** trên router, kèm `npm run cert` để có HTTPS.
-- **Cloudflare Tunnel**: chạy `cloudflared tunnel --url http://localhost:8080`, đặt `TRUST_PROXY=true`.
-- **Tailscale / ZeroTier**: giữ nguyên `internal`, vì dải 100.64.0.0/10 của Tailscale được coi là nội bộ.
+### Đăng ký và đăng nhập
 
-Tính toàn vẹn và quyền truy cập được bảo vệ bằng chữ ký, kể cả khi chạy HTTP. Tuy vậy, **nội dung tệp chỉ được mã hóa khi chạy HTTPS**, nên trên Internet hãy luôn dùng HTTPS.
+1. Chọn **Tạo danh tính**, nhập tên người dùng và mật khẩu. Cặp khóa được tạo và lưu trên trình duyệt.
+2. So sánh fingerprint hiển thị ở mục **Máy chủ** với fingerprint in trên console của máy chủ.
+3. Những lần sau, nhập mật khẩu và chọn **Mở khóa & đăng nhập**.
 
----
+Tùy chọn **Xác thực 2 chiều** (bật mặc định) kiểm tra chữ ký của máy chủ khi đăng nhập. Nếu tắt, chỉ máy chủ xác thực người dùng.
 
-## CLI
+Để dùng danh tính trên máy khác, vào **Danh tính → Tải file sao lưu danh tính**, sau đó chọn **Nhập danh tính** trên máy mới.
+
+### Tải tệp lên
+
+1. Vào **Tệp → Tải tệp lên**, chọn hoặc kéo thả tệp.
+2. Thiết lập quyền tải xuống:
+   - **Yêu cầu khóa khi tải xuống**: bỏ chọn để tệp ở chế độ công khai.
+   - **Người phê duyệt** và **Số chữ ký cần (M)**: số người phải ký trước khi khóa tải xuống có hiệu lực.
+   - **Hiển thị**: hiển thị trong danh sách hoặc ẩn.
+3. Chọn **Ký & tải lên**.
+
+Quản trị viên tải lên trực tiếp. Người dùng thường cần nhập **Mã Khóa tải lên** do quản trị viên cấp.
+
+### Tải tệp xuống
+
+Màu của mỗi ô tệp thể hiện quyền của bạn:
+
+| Màu | Ý nghĩa |
+|---|---|
+| Xanh lá | Được phép tải |
+| Vàng | Đã có khóa, đang chờ ký |
+| Xám đậm | Cần khóa |
+
+- **Tệp công khai**: tải tại trang **Tệp công khai**, không cần đăng nhập.
+- **Tệp cần khóa**: mở tệp, nhập mã khóa nhận được và chọn **Ký & mở**. Khi khóa đủ chữ ký, tệp được tải về.
+
+Để kiểm tra tính toàn vẹn của tệp đã tải, mở tệp và vào tab **Chi tiết & xác minh**.
+
+### Cấp quyền tải xuống
+
+1. Mở tệp và chọn **Tạo khóa**, hoặc vào **Khóa & quyền → Tạo khóa**.
+2. Chọn người nhận, số lần dùng và thời hạn. Chọn **Bất kỳ ai có mã** nếu chưa biết tài khoản người nhận.
+3. Chọn **Ký & tạo khóa** và gửi mã `XXXX-XXXX-XXXX-XXXX` cho người nhận.
+4. Người nhận nhập mã và ký nhận.
+5. Nếu tệp yêu cầu nhiều người phê duyệt, những người còn lại mở mã tại **Khóa & quyền** và chọn **Đồng ký phê duyệt**.
+
+Khóa có hiệu lực khi đủ M chữ ký phê duyệt và chữ ký của người nhận. Người phê duyệt hoặc người nhận có thể **Thu hồi** khóa bất cứ lúc nào.
+
+### Cấp quyền tải lên
+
+Quản trị viên vào **Khóa & quyền → Tạo khóa**, chọn loại **Khóa tải lên** và đặt dung lượng tối đa mỗi tệp. Người nhận ký nhận khóa, sau đó nhập mã khi tải tệp lên.
+
+### Quản trị
+
+Trang **Quản trị** dùng để kích hoạt, vô hiệu hóa, cấp hoặc gỡ quyền quản trị cho người dùng, và xem nhật ký hoạt động.
+
+## Sử dụng dòng lệnh (CLI)
 
 ```bash
-npm link                                   # hoặc: node cli/lfs.js …
-lfs init alice                             # tạo danh tính
-lfs server http://192.168.1.10:8080 --fingerprint AB7A:45A4:…   # ghim server
-lfs register && lfs login                  # --one-way để bỏ kiểm tra server
-
-lfs upload report.pdf --approvers carol --threshold 2      # cần khóa, 2-of-2
-lfs upload readme.txt --public                            # công khai
-lfs access <fileId> public|protected
-lfs ls
-lfs grant download <fileId> --to bob --uses 1 --hours 24  # in ra mã khóa
-lfs grant upload --to bob --max-mb 500                     # (admin)
-lfs key <CODE> | accept <CODE> | approve <CODE> | revoke <CODE> | keys
-lfs download <fileId> [-o out]             # tự kiểm tra SHA-256 + chữ ký
-lfs admin bob status disabled | lfs audit
+npm link          # cài lệnh `lfs`; hoặc dùng: node cli/lfs.js <lệnh>
 ```
 
-`LFS_PASSPHRASE` dùng để bỏ qua bước hỏi mật khẩu. `LFS_HOME` (hoặc `--home`) dùng để chọn hồ sơ khác.
+### Thiết lập
 
----
-
-## Bảo mật: tóm tắt thiết kế
-
-- Mọi chữ ký đều ký lên `LFS-v1\n<mục đích>\n<JSON chuẩn hóa>`. Vì phần *mục đích* (`upload`, `download`, `grant`, `grant-accept`…) nằm trong nội dung được ký, chữ ký của hành động này không dùng lại được cho hành động khác.
-- Mọi yêu cầu đã ký đều có `nonce` + `ts` (lệch tối đa 5 phút), và nonce đã dùng sẽ bị từ chối, nên không thể **replay**.
-- Khóa tải xuống gắn với **SHA-256 của tệp**: nếu tệp bị thay, khóa không còn khớp.
-- Đăng ký phải kèm chữ ký chứng minh sở hữu khóa, và chữ ký đó gắn với khóa của server này.
-- Trình duyệt tự kiểm tra lại mọi chữ ký của khóa trước khi cho bạn ký nhận, nên server không thể giả mạo chữ ký của người phê duyệt.
-- Link tải dùng 1 lần, sống 60 giây. Có CSP chặt và không có inline script.
-
-Những điểm chưa có: đổi khóa (key rotation) cho người dùng, mã hóa đầu-cuối nội dung tệp.
-
-## Cấu trúc
-
+```bash
+lfs init <tên>                                      # tạo danh tính
+lfs server http://192.168.1.10:8000 --fingerprint <FP>
+lfs register
+lfs login                                           # --one-way: xác thực 1 chiều
 ```
-server/   index.js (API + static), store.js (file thuần), config.js
-shared/   lfs-crypto.js — mật mã dùng chung cho server, CLI và trình duyệt
-public/   giao diện web (vanilla JS, không cần build)
-cli/      lfs.js
-scripts/  gen-cert.js
-test/     e2e.js
+
+### Lệnh
+
+| Lệnh | Mô tả |
+|---|---|
+| `lfs ls` | Liệt kê tệp |
+| `lfs upload <tệp> [--public] [--approvers a,b] [--threshold N] [--key MÃ]` | Tải tệp lên |
+| `lfs download <id> [--key MÃ] [-o đường_dẫn]` | Tải tệp xuống và kiểm tra tính toàn vẹn |
+| `lfs access <id> public\|protected` | Đổi chế độ tải xuống của tệp |
+| `lfs rm <id>` | Xóa tệp |
+| `lfs grant download <id> --to <người\|*> [--uses N] [--hours H]` | Tạo khóa tải xuống |
+| `lfs grant upload --to <người> [--max-mb M]` | Tạo khóa tải lên (quản trị viên) |
+| `lfs key <MÃ>` | Xem khóa và trạng thái chữ ký |
+| `lfs accept <MÃ>` | Ký nhận khóa |
+| `lfs approve <MÃ>` | Đồng ký phê duyệt |
+| `lfs revoke <MÃ>` | Thu hồi khóa |
+| `lfs keys` | Liệt kê khóa liên quan |
+| `lfs users` | Liệt kê người dùng |
+| `lfs admin <người> status active\|disabled` | Kích hoạt hoặc vô hiệu hóa người dùng |
+| `lfs admin <người> role admin\|user` | Cấp hoặc gỡ quyền quản trị |
+| `lfs audit` | Xem nhật ký hoạt động |
+
+| Biến môi trường | Mô tả |
+|---|---|
+| `LFS_PASSPHRASE` | Mật khẩu danh tính, dùng cho script |
+| `LFS_HOME` | Thư mục hồ sơ (mặc định `~/.lfs`) |
+
+### Ví dụ
+
+```bash
+# Máy A
+lfs upload report.pdf --approvers carol --threshold 2
+lfs grant download 3f2a9c… --to bob
+
+# Máy C (người phê duyệt thứ hai)
+lfs approve 8F3K-2QX9-MA71-ZK4D
+
+# Máy B
+lfs accept 8F3K-2QX9-MA71-ZK4D
+lfs download 3f2a9c…
+```
+
+## Cấu hình
+
+Cấu hình được đọc theo thứ tự ưu tiên: tham số dòng lệnh, biến môi trường, rồi `config.json` (tạo từ `config.example.json`).
+
+| Biến môi trường | Mặc định | Mô tả |
+|---|---|---|
+| `PORT` | `8080` | Cổng lắng nghe |
+| `HOST` | `0.0.0.0` | Địa chỉ lắng nghe |
+| `NETWORK_MODE` | `internal` | `internal`: chỉ chấp nhận IP nội bộ. `external`: chấp nhận mọi IP |
+| `TRUST_PROXY` | `false` | Bật khi chạy sau reverse proxy hoặc tunnel |
+| `STORAGE_DIR` | `storage` | Thư mục lưu tệp |
+| `KEYS_DIR` | `keys` | Thư mục lưu khóa máy chủ và danh sách người dùng |
+| `DOWNLOAD_AUTH` | `true` | Giá trị mặc định của tùy chọn “Yêu cầu khóa khi tải xuống” |
+| `OPEN_REGISTRATION` | `true` | `false`: tài khoản mới cần quản trị viên kích hoạt |
+| `UPLOAD_KEY_THRESHOLD` | `1` | Số chữ ký quản trị viên cần cho một khóa tải lên |
+| `MAX_UPLOAD_MB` | `4096` | Dung lượng tệp tối đa |
+| `MAX_GRANT_DAYS` | `30` | Thời hạn tối đa của khóa |
+| `SESSION_TTL_MIN` | `480` | Thời gian hiệu lực của phiên đăng nhập |
+| `LFS_NAME` | `Local File Share` | Tên hiển thị của máy chủ |
+
+## Truy cập từ Internet
+
+Đặt `NETWORK_MODE=external` và chọn một trong các cách sau:
+
+| Cách | Thiết lập |
+|---|---|
+| Mở cổng trên router | Chuyển tiếp cổng tới máy chủ, chạy `npm run cert` để dùng HTTPS |
+| Cloudflare Tunnel | `cloudflared tunnel --url http://localhost:8080`, đặt `TRUST_PROXY=true` |
+| Tailscale / ZeroTier | Giữ `NETWORK_MODE=internal` (dải 100.64.0.0/10 được xem là nội bộ) |
+
+Khi truy cập qua Internet, nên dùng HTTPS để mã hóa nội dung tệp khi truyền.
+
+## Lưu ý
+
+- Tệp được lưu với tên gốc trong thư mục chia sẻ. Danh sách người dùng nằm tại `keys/authorized_keys`.
+- Khóa cấp quyền và phiên đăng nhập chỉ lưu trong bộ nhớ. Khởi động lại máy chủ sẽ hủy toàn bộ khóa đang có.
+- Sao lưu file danh tính. Mất file danh tính đồng nghĩa với mất tài khoản.
+
+## Kiểm thử
+
+```bash
+npm test
 ```
