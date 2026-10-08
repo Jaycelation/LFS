@@ -1,0 +1,21 @@
+{
+  "name": "local-file-share",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LAN / Internet file sharing with Ed25519 keys: 1-way / 2-way auth and M-of-N signed download & upload keys. No database.",
+  "main": "server/index.js",
+  "bin": { "lfs": "cli/lfs.js" },
+  "scripts": {
+    "start": "node server/index.js",
+    "cert": "node scripts/gen-cert.js",
+    "test": "node test/e2e.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.3",
+    "js-sha256": "^0.11.1",
+    "selfsigned": "^2.4.1",
+    "tweetnacl": "^1.0.3"
+  }
+}

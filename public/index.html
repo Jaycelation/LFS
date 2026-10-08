@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local File Share</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23343a40'/%3E%3Cpath d='M9 17l7-7 7 7M16 10v13' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+  <div id="root" class="page"></div>
+  <footer class="footer">
+    <small>Powered by Local File Share · Ed25519 · <span id="footerMode"></span></small>
+  </footer>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="/vendor/nacl-fast.min.js"></script>
+  <script src="/vendor/sha256.min.js"></script>
+  <script src="/shared/lfs-crypto.js"></script>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

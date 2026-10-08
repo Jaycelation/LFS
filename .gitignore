@@ -1,0 +1,8 @@
+node_modules/
+# runtime data: shared files, server key, registered users, TLS certs
+storage/
+keys/
+certs/
+config.json
+*.lfs-identity.json
+.lfs/

@@ -1,0 +1,15 @@
+{
+  "serverName": "Local File Share",
+  "host": "0.0.0.0",
+  "port": 8080,
+  "networkMode": "internal",
+  "trustProxy": false,
+  "storageDir": "storage",
+  "keysDir": "keys",
+  "openRegistration": true,
+  "downloadAuthDefault": true,
+  "maxUploadMB": 4096,
+  "uploadKeyThreshold": 1,
+  "sessionTtlMinutes": 480,
+  "maxGrantDays": 30
+}
